@@ -188,6 +188,19 @@ func (t *Tracer) CaptureServerRequest(span trace.Span, r *http.Request) {
 		span.SetAttributes(semconv.NetworkPeerPort(intPort))
 	}
 
+	// X-Forwarded-For is only present here if it was set or preserved by a
+	// trusted proxy: the forwardedheaders.XForwarded middleware strips it
+	// earlier in the chain for untrusted peers, so no additional trust
+	// check is needed at this point.
+	clientAddress := host
+	if forwardedFor := r.Header.Get("X-Forwarded-For"); forwardedFor != "" {
+		clientIP, _, _ := strings.Cut(forwardedFor, ",")
+		if clientIP = strings.TrimSpace(clientIP); clientIP != "" {
+			clientAddress = strings.TrimSpace(clientIP)
+		}
+	}
+	span.SetAttributes(semconv.ClientAddress(clientAddress))
+
 	for _, header := range t.capturedRequestHeaders {
 		// User-agent is already part of the semantic convention as a recommended attribute.
 		if strings.EqualFold(header, "User-Agent") {
